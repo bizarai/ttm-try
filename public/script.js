@@ -465,3 +465,291 @@ async function getRouteCoordinates(locations, travelMode = 'driving', preference
     // Hide loading indicator
     loadingIndicator.style.display = 'none';
   }
+}
+
+// Auto-suggest locations for the search input
+function initializeAutosuggest() {
+  let timeoutId;
+  
+  searchInput.addEventListener('input', () => {
+    // Clear previous timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
+    const query = searchInput.value.trim();
+    
+    // Only search if we have at least 3 characters
+    if (query.length < 3) {
+      return;
+    }
+    
+    // Add debounce to prevent too many API calls
+    timeoutId = setTimeout(() => {
+      fetch(`/api/geocode?location=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.features && data.features.length > 0) {
+            // Create suggestion list
+            const suggestions = data.features.slice(0, 5).map(feature => feature.place_name);
+            showSuggestions(suggestions);
+          }
+        })
+        .catch(err => {
+          console.error('Error with auto-suggest:', err);
+        });
+    }, 300);
+  });
+  
+  // Create and append suggestions element
+  const suggestionsContainer = document.createElement('div');
+  suggestionsContainer.className = 'suggestions-container';
+  suggestionsContainer.style.display = 'none';
+  suggestionsContainer.style.position = 'absolute';
+  suggestionsContainer.style.width = searchInput.offsetWidth + 'px';
+  suggestionsContainer.style.maxHeight = '200px';
+  suggestionsContainer.style.overflowY = 'auto';
+  suggestionsContainer.style.background = 'white';
+  suggestionsContainer.style.border = '1px solid #ddd';
+  suggestionsContainer.style.borderTop = 'none';
+  suggestionsContainer.style.borderRadius = '0 0 4px 4px';
+  suggestionsContainer.style.zIndex = '1000';
+  
+  // Insert after search input
+  searchInput.parentNode.insertBefore(suggestionsContainer, searchInput.nextSibling);
+  
+  // Position it correctly
+  function positionSuggestions() {
+    const inputRect = searchInput.getBoundingClientRect();
+    suggestionsContainer.style.top = (inputRect.bottom + window.scrollY) + 'px';
+    suggestionsContainer.style.left = (inputRect.left + window.scrollX) + 'px';
+    suggestionsContainer.style.width = inputRect.width + 'px';
+  }
+  
+  // Show suggestions
+  function showSuggestions(suggestions) {
+    if (suggestions.length === 0) {
+      suggestionsContainer.style.display = 'none';
+      return;
+    }
+    
+    suggestionsContainer.innerHTML = '';
+    suggestions.forEach(suggestion => {
+      const item = document.createElement('div');
+      item.className = 'suggestion-item';
+      item.textContent = suggestion;
+      item.style.padding = '8px 12px';
+      item.style.cursor = 'pointer';
+      item.style.borderBottom = '1px solid #eee';
+      
+      item.addEventListener('mouseover', () => {
+        item.style.backgroundColor = '#f1f1f1';
+      });
+      
+      item.addEventListener('mouseout', () => {
+        item.style.backgroundColor = 'white';
+      });
+      
+      item.addEventListener('click', () => {
+        searchInput.value = suggestion;
+        suggestionsContainer.style.display = 'none';
+      });
+      
+      suggestionsContainer.appendChild(item);
+    });
+    
+    positionSuggestions();
+    suggestionsContainer.style.display = 'block';
+  }
+  
+  // Hide suggestions when clicking outside
+  document.addEventListener('click', (e) => {
+    if (e.target !== searchInput && e.target !== suggestionsContainer) {
+      suggestionsContainer.style.display = 'none';
+    }
+  });
+  
+  // Reposition suggestions on window resize
+  window.addEventListener('resize', () => {
+    if (suggestionsContainer.style.display !== 'none') {
+      positionSuggestions();
+    }
+  });
+}
+
+// Add support for user location
+function addUserLocationSupport() {
+  // Create user location button
+  const locationButton = document.createElement('button');
+  locationButton.className = 'user-location-button';
+  locationButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="1"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+  locationButton.title = 'Use your current location';
+  locationButton.style.position = 'absolute';
+  locationButton.style.top = '10px';
+  locationButton.style.right = '10px';
+  locationButton.style.zIndex = '1';
+  locationButton.style.background = 'white';
+  locationButton.style.border = 'none';
+  locationButton.style.borderRadius = '4px';
+  locationButton.style.padding = '6px';
+  locationButton.style.boxShadow = '0 0 0 2px rgba(0,0,0,0.1)';
+  locationButton.style.cursor = 'pointer';
+  
+  document.getElementById('map').appendChild(locationButton);
+  
+  // Add event listener
+  locationButton.addEventListener('click', () => {
+    if ('geolocation' in navigator) {
+      // Show loading indicator
+      loadingIndicator.style.display = 'block';
+      
+      navigator.geolocation.getCurrentPosition(
+        position => {
+          const { latitude, longitude } = position.coords;
+          
+          // Add a special marker for current location
+          const userLocationFeature = {
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: [longitude, latitude]
+            },
+            properties: {
+              description: '<h3>Your location</h3>',
+              title: 'Your location'
+            }
+          };
+          
+          // Update map with current location
+          map.getSource('locations').setData({
+            type: 'FeatureCollection',
+            features: [userLocationFeature]
+          });
+          
+          // Center map on user location
+          map.flyTo({
+            center: [longitude, latitude],
+            zoom: 14
+          });
+          
+          // Reverse geocode to get location name
+          fetch(`/api/geocode?location=${longitude},${latitude}`)
+            .then(response => response.json())
+            .then(data => {
+              let locationName = 'Your location';
+              
+              if (data.features && data.features.length > 0) {
+                locationName = data.features[0].place_name;
+              }
+              
+              displayMessage(`You are at: ${locationName}`);
+              
+              // Add option to use this location for routing
+              const addToRouteBtn = document.createElement('button');
+              addToRouteBtn.textContent = 'Use this location for routing';
+              addToRouteBtn.style.marginTop = '10px';
+              addToRouteBtn.style.padding = '5px 10px';
+              addToRouteBtn.style.backgroundColor = '#0078ff';
+              addToRouteBtn.style.color = 'white';
+              addToRouteBtn.style.border = 'none';
+              addToRouteBtn.style.borderRadius = '4px';
+              addToRouteBtn.style.cursor = 'pointer';
+              
+              addToRouteBtn.addEventListener('click', () => {
+                searchInput.value = `from ${locationName} to `;
+                searchInput.focus();
+              });
+              
+              messageDisplay.appendChild(addToRouteBtn);
+            })
+            .catch(err => {
+              console.error('Error reverse geocoding:', err);
+              displayMessage('Found your location, but could not determine the address.');
+            })
+            .finally(() => {
+              loadingIndicator.style.display = 'none';
+            });
+        },
+        error => {
+          console.error('Error getting user location:', error);
+          loadingIndicator.style.display = 'none';
+          
+          let errorMessage = 'Could not access your location. ';
+          
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'You denied the request for geolocation.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location information is unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage += 'The request to get your location timed out.';
+              break;
+            default:
+              errorMessage += 'An unknown error occurred.';
+          }
+          
+          displayMessage(errorMessage);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    } else {
+      displayMessage('Geolocation is not supported by your browser.');
+    }
+  });
+}
+
+// Initialize everything when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+  initializeAutosuggest();
+  addUserLocationSupport();
+  
+  // Add example queries
+  const exampleQueries = [
+    'Show me directions from New York to Washington DC',
+    'Find route from San Francisco to Los Angeles by bicycle',
+    'How to get from Paris to Lyon avoiding highways',
+    'Seattle to Portland scenic route'
+  ];
+  
+  // Create examples container
+  const examplesContainer = document.createElement('div');
+  examplesContainer.className = 'example-queries';
+  examplesContainer.style.margin = '10px 0 20px';
+  
+  // Add title
+  const examplesTitle = document.createElement('p');
+  examplesTitle.textContent = 'Try these examples:';
+  examplesTitle.style.marginBottom = '5px';
+  examplesTitle.style.fontWeight = 'bold';
+  examplesContainer.appendChild(examplesTitle);
+  
+  // Add examples
+  exampleQueries.forEach(query => {
+    const example = document.createElement('span');
+    example.className = 'example-query';
+    example.textContent = query;
+    example.style.display = 'inline-block';
+    example.style.margin = '3px';
+    example.style.padding = '4px 8px';
+    example.style.background = '#f1f5f9';
+    example.style.borderRadius = '12px';
+    example.style.fontSize = '14px';
+    example.style.cursor = 'pointer';
+    
+    example.addEventListener('click', () => {
+      searchInput.value = query;
+      searchButton.click();
+    });
+    
+    examplesContainer.appendChild(example);
+  });
+  
+  // Insert before the map
+  document.querySelector('.search-container').insertAdjacentElement('afterend', examplesContainer);
+});
