@@ -1,0 +1,37 @@
+// 4. /public/index.html - Main HTML file
+// The HTML file for the frontend interface
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Route Visualization</title>
+  <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v2.9.2/mapbox-gl.js'></script>
+  <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v2.9.2/mapbox-gl.css' rel='stylesheet' />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Route Visualization</h1>
+  </header>
+  
+  <main>
+    <div class="search-container">
+      <input type="text" id="search-input" placeholder="Enter locations or ask a question like 'Show me a route from Paris to London'">
+      <button id="search-button">Search</button>
+    </div>
+    
+    <div id="message-display" class="message-container"></div>
+    
+    <div id="map"></div>
+    
+    <div id="loading-indicator">Processing...</div>
+  </main>
+  
+  <footer>
+    <p>Built with Mapbox and Cloudflare Pages</p>
+  </footer>
+  
+  <script src="script.js"></script>
+</body>
+</html>
