@@ -418,7 +418,7 @@ function handleProcessedResult(result) {
 
 /**
  * Display location chips with the option to select them for routing
- * @param {Array} locations - Array of location names
+ * @param {Array} locations - Array of location objects with name and timeContext
  * @param {string} message - Message to display
  */
 function displayLocationChips(locations, message) {
@@ -429,7 +429,11 @@ function displayLocationChips(locations, message) {
   let html = `<p>${message}</p><div class="location-chips">`;
   
   locations.forEach(location => {
-    html += `<span class="location-chip" data-location="${location}">${location}</span>`;
+    const displayName = location.timeContext 
+      ? `${location.name} (${location.timeContext})` 
+      : location.name;
+    
+    html += `<span class="location-chip" data-location="${location.name}">${displayName}</span>`;
   });
   
   html += `</div>`;
@@ -473,18 +477,8 @@ function displayLocationChips(locations, message) {
 }
 
 /**
- * Display a message to the user
- * @param {string} message - The message to display
- */
-function displayMessage(message) {
-  const messageElement = document.getElementById('message-display');
-  messageElement.style.display = 'block';
-  messageElement.innerHTML = `<p>${message}</p>`;
-}
-
-/**
  * Show locations as markers on the map without creating a route
- * @param {Array} locations - Array of location names
+ * @param {Array} locations - Array of location objects with name and timeContext
  */
 function showLocationsOnMap(locations) {
   // Clear existing route
@@ -498,11 +492,15 @@ function showLocationsOnMap(locations) {
   
   // Geocode each location
   const geocodePromises = locations.map(location =>
-    fetch(`${geocodingUrl}${encodeURIComponent(location)}.json?access_token=${mapboxToken}`)
+    fetch(`${geocodingUrl}${encodeURIComponent(location.name)}.json?access_token=${mapboxToken}`)
       .then(response => response.json())
       .then(data => {
         if (data.features && data.features.length > 0) {
           const feature = data.features[0];
+          // Create description that includes time context if available
+          const timeInfo = location.timeContext ? `<p><em>Time period: ${location.timeContext}</em></p>` : '';
+          const description = `<h3>${location.name}</h3>${timeInfo}<p>${feature.place_name}</p>`;
+          
           return {
             type: 'Feature',
             geometry: {
@@ -510,16 +508,17 @@ function showLocationsOnMap(locations) {
               coordinates: feature.geometry.coordinates
             },
             properties: {
-              description: `<h3>${location}</h3><p>${feature.place_name}</p>`,
-              title: location
+              description: description,
+              title: location.name,
+              timeContext: location.timeContext || ''
             }
           };
         }
-        console.log(`No results found for ${location}`);
+        console.log(`No results found for ${location.name}`);
         return null;
       })
       .catch(err => {
-        console.error(`Error geocoding ${location}:`, err);
+        console.error(`Error geocoding ${location.name}:`, err);
         return null;
       })
   );
