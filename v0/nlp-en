@@ -201,38 +201,62 @@ async function processNaturalLanguageInput(inputText) {
   const prompt = `
 You are a location and route information extraction system for a map application.
 
-TASK: Analyze this text and extract any location information and routing preferences.
+TASK: Analyze this text and extract any location information, whether it's a route request or just mentions places.
 
 INPUT: "${inputText}"
 
 INSTRUCTIONS:
-1. First, determine if this is a request for directions or a route between locations.
-2. Identify all location names mentioned in the text.
-3. If it's a route request, determine the order of travel between locations.
-4. Identify the mode of transportation if specified (driving, walking, cycling, transit).
-5. Extract any routing preferences (avoid highways, scenic route, fastest route, etc.).
+1. Determine if this is a request for directions/route between locations OR text that simply mentions geographical places.
+2. Extract ALL geographical locations mentioned in the text, including cities, countries, regions, landmarks, etc.
+3. For route requests, determine the order of travel between locations.
+4. For non-route texts that mention multiple locations, identify a logical sequence for these locations (chronological if time is mentioned, geographical proximity, or the order they appear in text).
+5. Identify the mode of transportation if specified (driving, walking, cycling, transit).
+6. Extract any routing preferences (avoid highways, scenic route, fastest route, etc.).
+7. For historical or descriptive texts, identify time periods or historical eras mentioned with locations (e.g., "Constantinople in 1453").
 
 Return a valid JSON object with the following structure:
 {
   "isRouteRequest": true/false,
-  "locations": ["Location1", "Location2", ...],
+  "locations": [
+    {"name": "Location1", "timeContext": "optional time period or year if mentioned"},
+    {"name": "Location2", "timeContext": "optional time period or year if mentioned"},
+    ...
+  ],
   "travelMode": "driving|walking|cycling|transit",
   "preferences": ["avoid highways", "scenic route", etc.],
-  "message": "If not a route request, provide a short helpful message to guide the user"
+  "message": "A user-friendly message providing guidance based on the input type",
+  "suggestedSequence": ["Location1", "Location2", ...] // suggested order for visualization
 }
 
 EXAMPLES:
 Input: "Show me how to get from Boston to New York"
-Output: {"isRouteRequest": true, "locations": ["Boston", "New York"], "travelMode": "driving", "preferences": [], "message": ""}
+Output: {
+  "isRouteRequest": true,
+  "locations": [{"name": "Boston", "timeContext": ""}, {"name": "New York", "timeContext": ""}],
+  "travelMode": "driving",
+  "preferences": [],
+  "message": "Creating a driving route from Boston to New York.",
+  "suggestedSequence": ["Boston", "New York"]
+}
 
-Input: "Plan a cycling trip from Paris through Lyon to Nice avoiding major roads"
-Output: {"isRouteRequest": true, "locations": ["Paris", "Lyon", "Nice"], "travelMode": "cycling", "preferences": ["avoid major roads"], "message": ""}
-
-Input: "Tell me about the history of Constantinople and Mediterranean region"
-Output: {"isRouteRequest": false, "locations": ["Constantinople", "Mediterranean"], "travelMode": "driving", "preferences": [], "message": "I found mentions of Constantinople and the Mediterranean region, but this doesn't seem to be a route request. Would you like to see these locations on the map?"}
+Input: "Gibbon's canvas is large geographically and chronologically. One expects a sharp focus on the Mediterranean, but Gibbon ranges from sub-Saharan Africa to China. And although he ostensibly covers the period from the Antonines in the second century after Christ until the final collapse of Constantinople in 1453, even this broad range does not contain our author."
+Output: {
+  "isRouteRequest": false,
+  "locations": [
+    {"name": "Mediterranean", "timeContext": ""},
+    {"name": "sub-Saharan Africa", "timeContext": ""},
+    {"name": "China", "timeContext": ""},
+    {"name": "Constantinople", "timeContext": "1453"}
+  ],
+  "travelMode": "driving",
+  "preferences": [],
+  "message": "I found several geographical locations mentioned in this historical text. Would you like to see them visualized on a map?",
+  "suggestedSequence": ["Mediterranean", "sub-Saharan Africa", "China", "Constantinople"]
+}
 
 If travel mode is not specified, default to "driving".
 If preferences are not specified, return an empty array.
+For non-route requests, provide a helpful message explaining what was found and suggesting how the user might want to visualize it.
 Return ONLY the JSON object, no additional text.
 `;
 
@@ -295,12 +319,13 @@ Return ONLY the JSON object, no additional text.
     // Fallback with basic analysis if API fails
     return {
       isRouteRequest: isLikelyRouteRequest,
-      locations: extractLocationsBasic(inputText),
+      locations: extractLocationsBasic(inputText).map(loc => ({ name: loc, timeContext: "" })),
       travelMode: inputText.match(/\b(walking|cycling|driving|transit)\b/i)?.[1]?.toLowerCase() || 'driving',
       preferences: [],
       message: isLikelyRouteRequest 
         ? "I had trouble understanding the details, but I'll try to map what I understood."
-        : "This doesn't appear to be a route request. Try something like 'Show me a route from New York to Washington DC'."
+        : "I found some potential locations in your text. Would you like to see them on the map?",
+      suggestedSequence: extractLocationsBasic(inputText)
     };
   }
 }
