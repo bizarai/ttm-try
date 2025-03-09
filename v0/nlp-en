@@ -358,24 +358,61 @@ function extractLocationsBasic(text) {
 function handleProcessedResult(result) {
   console.log('Processed result:', result);
   
-  if (result.isRouteRequest && result.locations && result.locations.length >= 2) {
+  // Extract location names from the new format
+  const locationNames = result.locations.map(loc => loc.name);
+  
+  if (result.isRouteRequest && locationNames.length >= 2) {
     // It's a route request with enough locations
-    displayMessage(`Creating route between ${result.locations.join(', ')}${result.travelMode !== 'driving' ? ' via ' + result.travelMode : ''}${result.preferences.length > 0 ? ' with preferences: ' + result.preferences.join(', ') : ''}`);
-    getRouteCoordinates(result.locations, result.travelMode || 'driving', result.preferences || []);
-  } else if (result.locations && result.locations.length > 0) {
-    // It's not a route request but has locations or doesn't have enough locations
-    const messageText = result.isRouteRequest 
-      ? `I found these locations, but need at least two for a route: ${result.locations.join(', ')}` 
-      : (result.message || `I found these locations mentioned: ${result.locations.join(', ')}`);
+    displayMessage(`Creating route between ${locationNames.join(', ')}${result.travelMode !== 'driving' ? ' via ' + result.travelMode : ''}${result.preferences.length > 0 ? ' with preferences: ' + result.preferences.join(', ') : ''}`);
+    getRouteCoordinates(locationNames, result.travelMode || 'driving', result.preferences || []);
+  } else if (locationNames.length > 0) {
+    // It's not a route request but has locations
+    // If we have a suggested sequence, use it, otherwise use the locations as is
+    const sequenceToUse = result.suggestedSequence && result.suggestedSequence.length > 0 
+      ? result.suggestedSequence 
+      : locationNames;
     
     // Display locations with interactive chips
-    displayLocationChips(result.locations, messageText);
+    displayLocationChips(result.locations, result.message || `I found these locations mentioned: ${locationNames.join(', ')}`);
     
     // Show the locations on the map
     showLocationsOnMap(result.locations);
+    
+    // If multiple locations found in non-route request, offer to create a route
+    if (locationNames.length >= 2 && !result.isRouteRequest) {
+      const sequenceMsg = document.createElement('p');
+      sequenceMsg.innerHTML = `I can also create a sequence connecting these locations.`;
+      document.getElementById('message-display').appendChild(sequenceMsg);
+      
+      const createSequenceBtn = document.createElement('button');
+      createSequenceBtn.id = 'create-sequence-btn';
+      createSequenceBtn.innerText = 'Show Locations as Sequence';
+      createSequenceBtn.style = 'padding: 5px 10px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;';
+      document.getElementById('message-display').appendChild(createSequenceBtn);
+      
+      createSequenceBtn.addEventListener('click', () => {
+        getRouteCoordinates(sequenceToUse, 'driving', []);
+        displayMessage(`Visualizing a sequence through: ${sequenceToUse.join(', ')}`);
+      });
+    }
   } else {
     // No locations found
-    displayMessage(result.message || "I couldn't find any locations in your text. Try being more specific about places you want to see on the map.");
+    displayMessage(result.message || "I couldn't find any locations in your text. Try mentioning specific places, or ask for directions between locations.");
+    
+    // Provide guidance for users
+    const guidanceEl = document.createElement('div');
+    guidanceEl.className = 'usage-guidance';
+    guidanceEl.innerHTML = `
+      <p style="margin-top: 15px; font-weight: bold;">Examples you can try:</p>
+      <ul style="margin-top: 5px; padding-left: 20px;">
+        <li>"Show me a route from San Francisco to Los Angeles"</li>
+        <li>"I want to travel from Paris to Rome via Geneva"</li>
+        <li>"Famous landmarks in Europe"</li>
+        <li>"The journey of Marco Polo from Venice to China"</li>
+        <li>"Ancient cities of Mesopotamia"</li>
+      </ul>
+    `;
+    document.getElementById('message-display').appendChild(guidanceEl);
   }
 }
 
